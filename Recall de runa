@@ -57,5 +57,5 @@ function countdown(sec:number){
   target.entity(rune);
 
   countdown(CFG.recallCast);
-  log('✅ Macro finalizada.',65);
+  log('✅ ¡Estás a salvo!.',65);
 })();
