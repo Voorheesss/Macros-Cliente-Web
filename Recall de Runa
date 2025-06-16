@@ -1,0 +1,53 @@
+/*──────────────────────────────────────────────────────────────────────────────
+ 🌀  MACRO: RECALL SOBRE RUNA SUELTA
+ 📅  Versión : 1.3  · 23-May-2025
+ ✍️  Autor   : Voorhees
+ 🗺️  Servidor: Última Alianza
+ 💻  Cliente : ClassicUO Web
+
+ ═══════════════════════ 📖  INSTRUCCIONES  📖 ═══════════════════════
+ • Pega el script en «Scripts» (Meta K) y ponlo en la Action Bar o a una tecla.
+ • Necesitas al menos una runa marcada (graphic 0x1F14) en tu mochila.
+ • Flujo de la macro
+     1) Encuentra la primera runa.
+     2) Lanza Recall y la apunta.
+     3) Muestra cuenta atrás de 7→0 s en chat del sistema.
+ • Todos los parámetros editables están en CONFIG.
+──────────────────────────────────────────────────────────────────────────────*/
+
+/*════════════ ⚙️  CONFIGURACIÓN  ⚙️ ════════════*/
+const CFG = {
+  runeGraphic : 0x1F14,        // 📦 Runa marcada
+  spell       : Spells.Recall, // ✨ Hechizo principal
+  targetDelay : 8000,          // ⏳ Tiempo máx. para cursor
+  recallCast  : 7              // 🔢 Segundos entre cast y teleport
+};
+
+/*════════════ 🛠️  UTILIDADES  🛠️ ═════════════*/
+const log  = (m:string,h=66)=>client.sysMsg(m,h);
+const rune = ()=>client.findType(CFG.runeGraphic,undefined,player.backpack) as Item;
+
+function countdown(sec:number){
+  for(let s=sec;s>=0;s--){
+    log(`⏳ Teleporte en ${s}s`,66);
+    if(s>0 && journal.waitForText('You have been teleported','System',1000)) return;
+    if(s===0) journal.waitForText('You have been teleported','System',1000);
+  }
+}
+
+/*════════════ 🚀  EJECUCIÓN  🚀 ══════════════*/
+(()=>{
+  const r=rune();
+  if(!r){log('❌ No hay runas en la mochila.',33);return;}
+
+  log('⌛ Lanzando Recall…',66);
+  client.castSpell(CFG.spell);
+  if(!target.wait(CFG.targetDelay)){
+    log('⚠️  No se abrió el cursor.',33);return;
+  }
+  target.entity(r);
+
+  countdown(CFG.recallCast);
+
+  log('✅ ¡Estás a Salvo!.',65);
+})();
