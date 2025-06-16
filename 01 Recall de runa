@@ -21,7 +21,7 @@
 const CFG = {
   runeGraphics : [0x1F14, 0x1F15, 0x1F16, 0x1F17], // 📦 Runas NSEW
   spell        : Spells.Recall,                    // ✨ Hechizo principal
-  targetDelay  : 8000,                             // ⏳ Cursor máx. 8 s
+  targetDelay  : 600,                              // ⏳ Cursor máx.
   recallCast   : 7                                 // 🔢 Cuenta atrás
 };
 
