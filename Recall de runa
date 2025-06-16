@@ -1,0 +1,61 @@
+/*──────────────────────────────────────────────────────────────────────────────
+ 🌀  MACRO: RECALL SOBRE RUNA SUELTA
+ 📅  Versión : 1.3 · 23-May-2025
+ ✍️  Autor   : Voorhees
+ 🗺️  Servidor: Última Alianza
+ 💻  Cliente : ClassicUO Web
+
+ ═══════════════════════ 📖  INSTRUCCIONES  📖 ═══════════════════════
+ • La macro detecta cualquier runa suelta en tu backpack, sin importar su
+   orientación (graphics 0x1F14, 0x1F15, 0x1F16, 0x1F17), lanza Recall y
+   muestra una cuenta atrás de 7 → 0 s sólo visible para ti.
+ • Todos los parámetros se encuentran en CONFIG.
+──────────────────────────────────────────────────────────────────────────────*/
+
+/*════════════ ⚙️  CONFIGURACIÓN  ⚙️ ════════════
+   runeGraphics : Lista de gráficos válidos de runas marcadas
+   spell        : Hechizo que se lanzará
+   targetDelay  : Tiempo máx. (ms) para que aparezca el cursor
+   recallCast   : Segundos estimados entre el cast y el teleport
+──────────────────────────────────────────────────────────────────────────────*/
+const CFG = {
+  runeGraphics : [0x1F14, 0x1F15, 0x1F16, 0x1F17], // 📦 Runas NSEW
+  spell        : Spells.Recall,                    // ✨ Hechizo principal
+  targetDelay  : 8000,                             // ⏳ Cursor máx. 8 s
+  recallCast   : 7                                 // 🔢 Cuenta atrás
+};
+
+/*════════════ 🛠️  UTILIDADES  🛠️ ═════════════*/
+const log  = (m:string,h=66)=>client.sysMsg(m,h);
+
+/** Devuelve la primera runa encontrada de cualquier orientación. */
+function findRune(): Item | undefined {
+  for (const g of CFG.runeGraphics) {
+    const r = client.findType(g, undefined, player.backpack) as Item;
+    if (r) return r;
+  }
+}
+
+/** Cuenta atrás sincronizada con el Journal (termina antes si teleporta). */
+function countdown(sec:number){
+  for(let s=sec;s>=0;s--){
+    log(`⏳ Teleporte en ${s}s`,66);
+    if(journal.waitForText('You have been teleported','System',1000)) return;
+  }
+}
+
+/*════════════ 🚀  EJECUCIÓN  🚀 ══════════════*/
+(()=>{
+  const rune = findRune();
+  if(!rune){log('❌ No hay runas en la mochila.',33);return;}
+
+  log('⌛ Lanzando Recall…',66);
+  client.castSpell(CFG.spell);
+  if(!target.wait(CFG.targetDelay)){
+    log('⚠️  No se abrió el cursor.',33);return;
+  }
+  target.entity(rune);
+
+  countdown(CFG.recallCast);
+  log('✅ Macro finalizada.',65);
+})();
