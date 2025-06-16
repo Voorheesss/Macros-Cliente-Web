@@ -1,0 +1,97 @@
+//──────────────────────────────────────────────────────────────────────────────
+// 🌀  MACRO: TRASLADAR ÍTEMS ENTRE CONTENEDORES
+// 📅  Versión : 3.2 · 23-May-2025
+// ✍️  Autor   : Voorhees
+// 🗺️  Servidor: Última Alianza
+// 💻  Cliente : ClassicUO Web
+//
+// ───────────── 📖  INSTRUCCIONES RÁPIDAS  ─────────────
+// 1. Si algún valor de CONFIG es 0, aparecerán tres cursores para señalar:
+//        1️⃣  Contenedor ORIGEN
+//        2️⃣  Contenedor DESTINO  (puede estar dentro del ORIGEN)
+//        3️⃣  OBJETO EJEMPLO      (una pieza del tipo a mover)
+// 2. El script crea una lista fija de todos los ítems del mismo *graphic*
+//    encontrados en ORIGEN (y sub-contenedores si `recursive = true`), EXCLUYENDO
+//    los que ya estén en el árbol del DESTINO.  Esa lista se recorre una sola
+//    vez, por lo que los objetos depositados no vuelven a procesarse.
+// 3. Cada traslado usa `player.moveItem()` y espera `moveDelayMs` ms.
+// 4. Mensajes solo para ti (hue 66) en el chat del sistema.
+//──────────────────────────────────────────────────────────────────────────────
+
+
+/*════════════ ⚙️  CONFIGURACIÓN  ════════════*/
+const CFG = {
+  sourceSerial : 0,      // ORIGEN   (0 = pedir)
+  destSerial   : 0,      // DESTINO  (0 = pedir)
+  itemGraphic  : 0,      // Graphic del ítem (0 = pedir)
+  recursive    : true,   // true = busca en sub-contenedores
+  moveDelayMs  : 600,    // Pausa entre movimientos
+  maxToMove    : 0       // 0 = sin límite; >0 = máximo a trasladar
+};
+
+
+/*════════════ 🛠️  UTILIDADES  ════════════*/
+const say = (txt: string, hue = 66) => client.sysMsg(txt, hue);
+
+/** Pide un target interactivo si el campo vale 0. */
+function request<K extends keyof typeof CFG>(
+  key: K, prompt: string, pick: (ti: TargetInfo) => number)
+{
+  if (CFG[key]) return;
+  say(`📌 ${prompt} — haz clic`, 34);
+  const ti = target.query();                 // cursor de selección
+  if (!ti) exit(`Cancelado: ${prompt}`);
+  CFG[key] = pick(ti) as any;
+  say(`${key} = 0x${(+CFG[key]).toString(16)}`, 88);
+}
+
+/** TRUE si «child» está (a cualquier nivel) dentro de «ancestor». */
+function inside(child: number, ancestor: number): boolean {
+  for (let cur = child; cur; ) {
+    if (cur === ancestor) return true;
+    const o = client.findObject(cur) as Item | undefined;
+    if (!o) break;
+    cur = o.containerSerial;
+  }
+  return false;
+}
+
+
+/*════════════ 🚀  EJECUCIÓN  ════════════*/
+(()=>{
+  /*── 1. Selecciones ───────────────────────────────────────────────────*/
+  request('sourceSerial','Contenedor ORIGEN',  ti => ti.serial);
+  request('destSerial',  'Contenedor DESTINO', ti => ti.serial);
+  request('itemGraphic', 'Objeto EJEMPLO',     ti => ti.graphic);
+
+  /*── 2. Lista fija de trabajo ─────────────────────────────────────────*/
+  say('🔎 Compilando lista de ítems…', 66);
+
+  const depth = CFG.recursive ? undefined : 0;          // undefined = profundo
+  let items = client.findAllItemsOfType(
+                 CFG.itemGraphic,
+                 undefined,
+                 CFG.sourceSerial,
+                 undefined,
+                 depth) as Item[];
+
+  // Excluye cualquier ítem que ya esté en la rama del DESTINO
+  items = items.filter(it => !inside(it.serial, CFG.destSerial));
+
+  if (items.length === 0){
+    say('❌ No se encontró ningún ítem para mover.', 33); return;
+  }
+  if (CFG.maxToMove && CFG.maxToMove > 0)
+      items = items.slice(0, CFG.maxToMove);
+
+  /*── 3. Traslado secuencial ───────────────────────────────────────────*/
+  let moved = 0;
+  for (const it of items){
+    player.moveItem(it.serial, CFG.destSerial);   // API oficial para mover
+    moved++;
+    sleep(CFG.moveDelayMs);
+  }
+
+  say(`✅ Traslado completo: ${moved} objeto(s).`, 65);
+})();
+
