@@ -1,0 +1,75 @@
+//──────────────────────────────────────────────────────────────────────────────
+// 🐾  MACRO: AUTO-VENDAS a MASCOTAS · prioridad + 1 tile
+// 📅  Versión : 1.4 · 24-May-2025
+// ✍️  Autor   : Voorhees
+// 🗺️  Servidor: Última Alianza   ·   💻  Cliente : ClassicUO Web
+//──────────────────────────────────────────────────────────────────────────────
+
+
+/*════════════ ⚙️  CONFIGURACIÓN  ════════════*/
+const CFG = {
+  petSerials     : [] as number[], // selecciona con healthbars (ESC para acabar)
+  minHP          : 99,             // % a partir del cual se venda
+  maxRange       : 1,              // 1 tile = pegado a la mascota
+  bandageCmd     : '.vendas',      // comando verbal
+  bandageDelayMs : 7_000,          // tiempo estimado de venda
+  scanDelayMs    : 400,            // velocidad del escaneo
+  msgHue         : 66
+};
+
+
+/*════════════ 🛠️  UTILIDADES  ════════════*/
+const say = (t: string, h = CFG.msgHue) => client.sysMsg(t, h);
+
+function registerPets() {
+  if (CFG.petSerials.length) return;
+  say('📌 Clic en las healthbars de tus mascotas (ESC para terminar)…', 34);
+  while (true) {
+    const ti = target.query();
+    if (!ti || ti.serial === 0) break;        // ESC → serial 0
+    if (!CFG.petSerials.includes(ti.serial)) {
+      CFG.petSerials.push(ti.serial);
+      say(`✅ Mascota añadida 0x${ti.serial.toString(16)}`, 88);
+    }
+  }
+  if (!CFG.petSerials.length) exit('Sin mascotas registradas.');
+}
+
+const dist = (m: Mobile) =>
+  Math.max(Math.abs(player.x - m.x), Math.abs(player.y - m.y));
+
+const hpPct = (m: Mobile) =>
+  m.maxHits ? Math.round((m.hits / m.maxHits) * 100) : 100;
+
+const needsHeal = (m: Mobile) =>
+  hpPct(m) < CFG.minHP && dist(m) <= CFG.maxRange;
+
+function bandagePet(m: Mobile) {
+  say(`🩹 Vendando ${m.name} (${hpPct(m)} % HP)`, 88);
+  player.say(CFG.bandageCmd);
+  target.waitTargetEntity(m, 1500);           // apunta la healthbar
+  sleep(CFG.bandageDelayMs);
+}
+
+
+/*════════════ 🚀  EJECUCIÓN  ════════════*/
+(() => {
+  registerPets();
+  say('🔁 Macro AUTO-VENDAS iniciada (rango 1 tile)', 65);
+
+  while (true) {
+    const candidates = CFG.petSerials
+      .map(s => client.findObject(s) as Mobile | undefined)
+      .filter((m): m is Mobile => !!m && needsHeal(m));
+
+    if (candidates.length) {
+      candidates.sort((a, b) => {
+        const hpDiff = hpPct(a) - hpPct(b);
+        return hpDiff !== 0 ? hpDiff : dist(a) - dist(b);
+      });
+      bandagePet(candidates[0]);              // cura al más herido/­cercano
+    }
+
+    sleep(CFG.scanDelayMs);
+  }
+})();
