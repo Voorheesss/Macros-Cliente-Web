@@ -1,0 +1,63 @@
+/*──────────────────────────────────────────────────────────────────────────────
+ 🌀  MACRO: POCIÓN DE INVISIBILIDAD + RECALL SOBRE RUNA
+ 📅  Versión : 1.2 · 23-May-2025
+ ✍️  Autor   : Voorhees
+ 🗺️  Servidor: Última Alianza
+ 💻  Cliente : ClassicUO Web
+
+ ═══════════════════════ 📖  INSTRUCCIONES  📖 ═══════════════════════
+     1) Bebe poción de invisibilidad (.invisibilidad).
+     2) Busca la primera runa (cualquiera de los gráficos 0x1F14-17).
+     3) Lanza Recall sobre la runa.
+     4) Muestra en tu chat de sistema una cuenta atrás de 7 → 0 s.
+ • Los parámetros se editan fácilmente en CONFIG.
+──────────────────────────────────────────────────────────────────────────────*/
+
+/*════════════ ⚙️  CONFIGURACIÓN  ⚙️ ════════════*/
+const CFG = {
+  runeGraphics : [0x1F14, 0x1F15, 0x1F16, 0x1F17], // 📦 Runas NSEW
+  spell        : Spells.Recall,                    // ✨ Hechizo principal
+  invisCmd     : '.invisibilidad',                 // 🧪 Comando poción
+  invisDelay   : 600,                              // 💤 Pausa tras poción
+  targetDelay  : 8000,                             // ⏳ Cursor máx. 8 s
+  recallCast   : 7                                 // 🔢 Cuenta atrás
+};
+
+/*════════════ 🛠️  UTILIDADES  🛠️ ═════════════*/
+const log  = (m:string,h=66)=>client.sysMsg(m,h);
+
+function findRune(): Item | undefined {
+  for (const g of CFG.runeGraphics) {
+    const r = client.findType(g, undefined, player.backpack) as Item;
+    if (r) return r;
+  }
+}
+
+function countdown(sec:number){
+  for(let s=sec;s>=0;s--){
+    log(`⏳ Teleporte en ${s}s`,66);
+    if(journal.waitForText('You have been teleported','System',1000)) return;
+  }
+}
+
+/*════════════ 🚀  EJECUCIÓN  🚀 ══════════════*/
+(()=>{
+  const rune = findRune();
+  if(!rune){log('❌ No hay runas en la mochila.',33);return;}
+
+  /* Invisibilidad */
+  log('🧪 Bebiendo poción de invisibilidad…',66);
+  player.say(CFG.invisCmd);
+  sleep(CFG.invisDelay);
+
+  /* Recall */
+  log('⌛ Lanzando Recall…',66);
+  client.castSpell(CFG.spell);
+  if(!target.wait(CFG.targetDelay)){
+    log('⚠️  No se abrió el cursor.',33);return;
+  }
+  target.entity(rune);
+
+  countdown(CFG.recallCast);
+  log('✅ '¡Estás a salvo!.',65);
+})();
