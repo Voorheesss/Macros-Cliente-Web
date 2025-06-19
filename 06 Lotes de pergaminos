@@ -1,0 +1,81 @@
+/*──────────────────────────────────────────────────────────────────────────────
+ 📝  MACRO: DESLOTEAR “BUNDLES” DE PERGAMINOS
+ 📅  Versión 1.2 · 24-May-2025
+ ✍️  Autor   : Voorhees
+ 🗺️  Servidor: Última Alianza   ·   💻 Cliente: ClassicUO Web
+
+ ═══════════════════════ 📖  RESUMEN  📖 ═══════════════════════
+ • Selecciona 3 cursores:  
+     1️⃣ Cofre con **lotes** (bundles) 📦  
+     2️⃣ Un **bundle de ejemplo** 🎁 (sirve solo para leer el *graphic*)  
+     3️⃣ Cofre de **salida** (donde caerán los 4 blanks)  
+ • La macro mueve **exactamente 1 bundle** por ciclo:  
+     mover → doble-click → aparecen 4 pergaminos en blanco → los devuelve  
+   al cofre. Repite hasta que no queda ningún bundle (graphic 0x1F14).  
+ • No filtra por *hue*: procesa cualquier lote del mismo graphic, así los  
+   “marrones” o tintados también se abren.  
+──────────────────────────────────────────────────────────────────────────────*/
+
+/*════════════ ⚙️  CONFIGURACIÓN ════════════*/
+const CFG = {
+  sourceSerial   : 0,        // Cofre con bundles (0 = pedir)
+  bundleGraphic  : 0,        // Graphic del bundle   (0 = pedir)
+  destSerial     : 0,        // Cofre de salida      (0 = pedir)
+
+  blankGraphic   : 0x0E34,   // 📄 Pergamino en blanco
+  blankHue       : 0x0000,   // Hue 0 = blanco real
+
+  moveDelayMs    : 300,
+  openDelayMs    : 500,
+};
+
+/*════════════ 🛠️  UTILIDADES  ═════════════*/
+const say = (t:string,h=66)=>client.sysMsg(t,h);
+
+/*── 1. CAPTURA DE OBJETIVOS ──────────────────────────────────────*/
+function pick(label:string,set:(ti:TargetInfo)=>void){
+  say(`📌 ${label} – haz clic`,34);
+  const ti=target.query(); if(!ti) exit('Cancelado');
+  set(ti); say(`${label} OK`,88);
+}
+if(!CFG.sourceSerial)  pick('Cofre con LOTES',  ti=>CFG.sourceSerial=ti.serial);
+if(!CFG.bundleGraphic) pick('Bundle de EJEMPLO',ti=>CFG.bundleGraphic=ti.graphic);
+if(!CFG.destSerial)    pick('Cofre de SALIDA',  ti=>CFG.destSerial=ti.serial);
+
+/*── 2. FUNCIONES DE APOYO ────────────────────────────────────────*/
+const nextBundle = ()=> client.findType(
+  CFG.bundleGraphic, undefined, CFG.sourceSerial, undefined, 0) as Item|undefined;
+
+const blanksInBag = ()=> client.findAllItemsOfType(
+  CFG.blankGraphic, CFG.blankHue, player.backpack, undefined, 0) as Item[];
+
+/*════════════ 🚀 BUCLE PRINCIPAL ════════════*/
+say('✅ Desloteo iniciado…',65);
+
+while(true){
+  const bun = nextBundle();
+  if(!bun){ say('✔️ No quedan lotes. Macro OFF.',65); break; }
+
+  /* 1) Mover **1** unidad del bundle al backpack */
+  player.moveItem(bun.serial, player.backpack.serial, 0,0,0, 1);
+  const t0 = Date.now();
+  let bunBag: Item|undefined;
+  /* Espera hasta 2 s a que aparezca en la mochila */
+  do{
+    bunBag = client.findType(
+              CFG.bundleGraphic, CFG.bundleHue, player.backpack) as Item;
+    if(bunBag) break;
+    sleep(100);
+  }while(Date.now()-t0 < 2000);
+
+  if(!bunBag){ say('⚠️ Lote no llegó a la mochila (timeout). Continúo…',33); continue; }
+
+  /* 2) Abrir el bundle */
+  player.use(bunBag);  sleep(CFG.openDelayMs);
+
+  /* 3) Devolver los blanks producidos */
+  for(const s of blanksInBag())
+    player.moveItem(s.serial, CFG.destSerial);
+
+  sleep(CFG.moveDelayMs);
+}
