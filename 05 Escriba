@@ -1,0 +1,174 @@
+/*──────────────────────────────────────────────────────────────────────────────
+ 📝  MACRO: ESCRIBA 24/7 – Pergaminos de RECALL
+ 📅  Versión 5.4 · 24-May-2025
+ ✍️  Autor   : Voorhees
+ 🗺️  Servidor: Última Alianza   ·   💻 Cliente: ClassicUO Web
+
+ ═══════════════════════ 📖  RESUMEN DETALLADO  📖 ═══════════════════════
+ ➊ **Inicio interactivo**  
+    • 5 cursores para señalar, en orden:  
+      1) Cofre de **plumas y tinta** ✒️  
+      2) Cofre de **reagentes** 🧪  
+      3) Cofre de **pergaminos en blanco** 📄  
+      4) Cofre de **salida** (scrolls terminados) 📦  
+      5) **Comida** 🍗 (se consumirá cada 5 min)  
+
+ ➋ **Restock inteligente**  
+    • Mueve lotes pequeños → 2 plumas, 40 blanks (hue 0) y 60 unidades  
+      de cada reagente requerido.  
+    • Busca recursivamente dentro de sub-contenedores (`depth 0`).  
+
+ ➌ **Ciclo automático**  
+    • _Modo CRAFT_ 🔨: fabrica «✨ FABRICAR ÚLTIMO ✨» cada 7 s mientras  
+      el maná ≥ 30 %.  
+    • _Modo MED_ 🧘: cuando el maná < 30 % relanza **Meditation** cada 8 s  
+      hasta recuperar ≥ 95 %, entonces vuelve a CRAFT.  
+    • Al llegar al **90 % de peso** mueve **todos** los scrolls inscritos  
+      (graphic 0x1F4C, cualquier hue) al cofre de salida y continúa.  
+    • Come la pieza de comida configurada cada 5 min.
+
+ ➍ **Protecciones**  
+    • Solo usa pergaminos en blanco hue 0 (evita “lotes marrones”).  
+    • Cierra el gump tras pulsar el botón 508 para no acumular ventanas.  
+    • Mensajes de depuración (hue 66 / 65 / 33) sin spam global.
+
+ ════════════════ 📜  ÍNDICE DE REAGENTS  📜 ════════════════
+  • Black Pearl      0x0F7A   • Blood Moss     0x0F7B
+  • Garlic           0x0F84   • Ginseng        0x0F85
+  • Mandrake Root    0x0F86   • Nightshade     0x0F88
+  • Sulfurous Ash    0x0F8C   • Spider’s Silk  0x0F8D
+──────────────────────────────────────────────────────────────────────────────*/
+
+/*════════════ ⚙️  CONFIGURACIÓN  ════════════*/
+const CFG = {
+  /*― gráficos clave ―*/
+  penGraphic      : 0x0FBF,   // ✒️  Pluma + tinta
+  blankGraphic    : 0x0E34,   // 📄  Pergamino en blanco
+  blankHue        : 0x0000,   //     Hue 0 = scroll blanco real
+  finishedGraphic : 0x1F4C,   // 📜  Cualquier scroll inscrito
+
+  /*― lotes mínimos y de reposición ―*/
+  minPens : 1,   grabPens : 2,
+  minBlanks : 10, grabBlanks : 40,
+  minEachReagent : 30, grabReags : 60,
+
+  /*― umbrales y tiempos ―*/
+  weightThresh   : 0.90,      // 90 % del peso máx.
+  foodEveryMs    : 5 * 60 * 1000,
+  manaLow        : 0.30,      // <30 % -> Meditar
+  manaFull       : 0.95,      // ≥95 % -> volver a CRAFT
+  medRetryMs     : 8000,      // reintento Meditation
+  craftDelayMs   : 7000,      // enfriamiento entre crafts
+  loopDelayMs    : 350,
+
+  /*― Inscripción ―*/
+  inscriptGump   : 0x460,
+  craftLastBtn   : 508
+};
+
+/*════════════ 🍃  RECIPE – RECALL  🍃 ════════════*/
+const RECIPE = [0x0F7A, 0x0F7B, 0x0F86];
+
+/*════════════ 🛠️  UTILIDADES  🛠️ ═════════════*/
+const say = (txt:string, hue=66)=>client.sysMsg(txt,hue);
+
+/*── 1. CAPTURA DE TARGETS ─────────────────────────────────────────*/
+const BOX = { pen:0, reag:0, blank:0, out:0, foodG:0 };
+function ask<K extends keyof typeof BOX>(k:K, label:string, useGraphic=false){
+  say(`📌 ${label} – haz clic`,34);
+  const t=target.query(); if(!t) exit(`Cancelado`);
+  BOX[k]=useGraphic?t.graphic:t.serial; say(`${label} OK`,88);
+}
+ask('pen','Cont. PLUMAS'); ask('reag','Cont. REAGENTES');
+ask('blank','Cont. BLANKS'); ask('out','Cont. SALIDA');
+ask('foodG','COMIDA',true);
+
+/*── 2. INVENTARIO Y MOVIMIENTO ────────────────────────────────────*/
+const qty = (gfx:number, hue:number|null=null)=>
+ (client.findAllItemsOfType(gfx,hue??undefined,player.backpack,undefined,0) as Item[]|[])
+ .reduce((n,i)=>n+i.amount,0);
+
+const move = (it:Item, amount:number, dst:number)=>{
+  player.moveItem(it.serial, dst, 0,0,0, amount);
+  sleep(300);
+};
+
+/*── 3. RESTOCK ────────────────────────────────────────────────────*/
+function fetch(box:number,gfx:number,hue:number|null,min:number,take:number){
+  let need=min-qty(gfx,hue); if(need<=0)return;
+  const stacks=client.findAllItemsOfType(gfx,hue??undefined,box,undefined,0) as Item[];
+  for(const s of stacks){
+    const part=Math.min(take,s.amount,need);
+    move(s,part,player.backpack); need-=part; if(need<=0)break;
+  }
+}
+function restock(){
+  fetch(BOX.pen,   CFG.penGraphic,   null,           CFG.minPens,        CFG.grabPens  );
+  fetch(BOX.blank, CFG.blankGraphic, CFG.blankHue,   CFG.minBlanks,      CFG.grabBlanks);
+  for(const g of RECIPE)
+    fetch(BOX.reag, g,              null,           CFG.minEachReagent, CFG.grabReags);
+}
+
+/*── 4. DESCARGA FIABLE DE SCROLLS ─────────────────────────────────*/
+function dumpScrolls(){
+  const list=client.findAllItemsOfType(
+               CFG.finishedGraphic,undefined,player.backpack,undefined,0) as Item[];
+  for(const s of list) move(s,s.amount,BOX.out);
+}
+
+/*── 5. COMIDA ────────────────────────────────────────────────────*/
+let nextMeal=Date.now()+CFG.foodEveryMs;
+function feedIfNeeded(){
+  if(Date.now()<nextMeal) return;
+  const food=client.findType(BOX.foodG,undefined,player.backpack) as Item;
+  if(food) player.use(food);
+  nextMeal=Date.now()+CFG.foodEveryMs;
+}
+
+/*── 6. MANÁ & ESTADO ─────────────────────────────────────────────*/
+type Mode='CRAFT'|'MED'; let mode:Mode='CRAFT';
+let nextMedTry=0, nextCraft=0;
+const manaRatio=()=>player.mana/player.maxMana;
+function medLoop(){
+  if(Date.now()<nextMedTry) return;
+  try{player.useSkill('Meditation');}catch{player.useSkill(46);}
+  nextMedTry=Date.now()+CFG.medRetryMs;
+}
+
+/*── 7. CRAFTEO ───────────────────────────────────────────────────*/
+const haveRegs=()=>RECIPE.every(g=>qty(g)>=CFG.minEachReagent);
+function craftOne(){
+  if(Date.now()<nextCraft) return;
+  if(!haveRegs()){ restock(); return; }
+
+  const pen  = client.findType(CFG.penGraphic,undefined,player.backpack) as Item;
+  const blank= client.findType(CFG.blankGraphic,CFG.blankHue,player.backpack) as Item;
+  if(!pen||!blank){ restock(); return; }
+
+  player.use(pen); player.use(blank);
+  const g=Gump.findOrWait(CFG.inscriptGump,800);
+  if(g&&g.hasButton(CFG.craftLastBtn)){ g.reply(CFG.craftLastBtn); g.close(); }
+  else say('⚠️ Botón no hallado',33);
+
+  nextCraft=Date.now()+CFG.craftDelayMs;
+}
+
+/*════════════ 🚀  LOOP PRINCIPAL  ═════════════*/
+say('✅ Macro ON – ¡a escribir!',65);
+while(true){
+  feedIfNeeded();
+  restock();
+
+  const m=manaRatio();
+  if(mode==='CRAFT' && m<CFG.manaLow ){ mode='MED'; nextMedTry=0; say('🧘 Meditar…',66);}
+  if(mode==='MED'   && m>=CFG.manaFull){ mode='CRAFT'; say('🔨 Retoma crafteo',65);}
+
+  if(mode==='MED') medLoop();
+  else{
+    if(player.weight/player.weightMax >= CFG.weightThresh){
+      say('📦 Peso alto – descargando scrolls…',66); dumpScrolls();
+    }
+    craftOne();
+  }
+  sleep(CFG.loopDelayMs);
+}
