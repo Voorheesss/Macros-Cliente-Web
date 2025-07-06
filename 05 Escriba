@@ -62,7 +62,7 @@ const CFG = {
   loopDelayMs    : 350,
 
   /*― Inscripción ―*/
-  inscriptGump   : 0x460,
+  inscriptGump   : 0x3F8,
   craftLastBtn   : 508
 };
 
